@@ -1,0 +1,38 @@
+# Example Sidekiq configuration with queue limits
+# This file shows how to configure queue limits in sidekiq.yml
+
+:concurrency: 25
+:queues:
+  - [default, 1]
+  - [high, 2]
+  - [low, 1]
+  - [email, 3]
+  - [processing, 2]
+  - [api_calls, 1]
+
+# Queue limits configuration
+# This ensures that each queue never runs more than the specified number of concurrent jobs
+:limits:
+  default: 100
+  high: 50
+  low: 200
+  email: 10
+  processing: 5
+  api_calls: 20
+
+# Other Sidekiq configuration options
+:timeout: 30
+:max_retries: 3
+:retry_interval: 5
+
+# Redis configuration
+:redis:
+  url: redis://localhost:6379/0
+  namespace: sidekiq
+
+# Logging configuration
+:logfile: ./log/sidekiq.log
+:loglevel: info
+
+# Process configuration
+:pidfile: ./tmp/pids/sidekiq.pid 

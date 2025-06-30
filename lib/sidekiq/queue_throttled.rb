@@ -1,0 +1,49 @@
+# frozen_string_literal: true
+
+require 'sidekiq'
+require 'redis'
+require 'concurrent'
+require 'json'
+require 'logger'
+
+require_relative 'queue_throttled/version'
+require_relative 'queue_throttled/configuration'
+require_relative 'queue_throttled/queue_limiter'
+require_relative 'queue_throttled/job_throttler'
+require_relative 'queue_throttled/middleware'
+require_relative 'queue_throttled/job'
+
+module Sidekiq
+  module QueueThrottled
+    class << self
+      def configure
+        yield configuration
+      end
+
+      def configuration
+        @configuration ||= Configuration.new
+      end
+
+      attr_writer :configuration, :logger, :redis
+
+      def logger
+        @logger ||= begin
+          logger = Logger.new($stdout)
+          logger.level = Logger::INFO
+          logger
+        end
+      end
+
+      def redis
+        @redis ||= Sidekiq.redis { |conn| conn }
+      end
+    end
+  end
+end
+
+# Auto-load the middleware when the gem is required
+Sidekiq.configure_server do |config|
+  config.server_middleware do |chain|
+    chain.add Sidekiq::QueueThrottled::Middleware
+  end
+end
