@@ -12,69 +12,79 @@ module Sidekiq
         queue_name = job['queue'] || queue
         job_class = worker.class.name
 
-        # Check queue-level limits
+        return reschedule_and_return(job, queue_name, 'queue') unless queue_slot_available?(queue_name, job)
+        return reschedule_and_return(job, queue_name, 'job') unless job_slot_available?(job_class, job['args'], job,
+                                                                                        queue_name)
+
+        process_job(worker, job, queue, queue_name, job_class)
+      end
+
+      private
+
+      def queue_slot_available?(queue_name, job)
         queue_limiter = get_queue_limiter(queue_name)
-        if queue_limiter
-          lock_id = queue_limiter.acquire_lock
-          unless lock_id
-            Sidekiq::QueueThrottled.logger.info "Queue limit reached for #{queue_name}, rescheduling job"
-            reschedule_job(job, queue_name)
-            return nil
-          end
-        end
+        return true unless queue_limiter
 
-        # Check job-level throttling
+        lock_id = queue_limiter.acquire_lock
+        job['lock_id'] = lock_id if lock_id
+        !!lock_id
+      end
+
+      def job_slot_available?(job_class, args, job, queue_name)
         job_throttler = get_job_throttler(job_class)
-        if job_throttler && !job_throttler.acquire_slot(job['args'])
-          Sidekiq::QueueThrottled.logger.info "Job throttling limit reached for #{job_class}, rescheduling job"
-          reschedule_job(job, queue_name)
-          return nil
-        end
+        return true unless job_throttler
 
-        # Process the job
+        acquired = job_throttler.acquire_slot(args)
+        job['job_throttle_acquired'] = acquired
+        acquired
+      end
+
+      def process_job(worker, job, queue, queue_name, job_class)
+        queue_limiter = get_queue_limiter(queue_name)
+        job_throttler = get_job_throttler(job_class)
+        lock_id = job['lock_id']
         begin
           yield
         ensure
-          # Release locks
           queue_limiter&.release_lock(lock_id)
           job_throttler&.release_slot(job['args'])
         end
       end
 
-      private
+      def reschedule_and_return(job, queue_name, type)
+        msg = type == 'queue' ? 'Queue limit reached' : 'Job throttling limit reached'
+        Sidekiq::QueueThrottled.logger.info "#{msg} for #{queue_name}, rescheduling job"
+        reschedule_job(job, queue_name)
+        nil
+      end
 
       def get_queue_limiter(queue_name)
         limit = Sidekiq::QueueThrottled.configuration.queue_limit(queue_name)
         return nil unless limit
 
-        @queue_limiters.compute_if_absent(queue_name) do
-          QueueLimiter.new(queue_name, limit)
-        end
+        @queue_limiters.compute_if_absent(queue_name) { QueueLimiter.new(queue_name, limit) }
       end
 
       def get_job_throttler(job_class)
-        throttle_config = get_throttle_config(job_class)
+        throttle_config = throttle_config_for(job_class)
         return nil unless throttle_config
 
-        @job_throttlers.compute_if_absent(job_class) do
-          JobThrottler.new(job_class, throttle_config)
-        end
+        @job_throttlers.compute_if_absent(job_class) { JobThrottler.new(job_class, throttle_config) }
       end
 
-      def get_throttle_config(job_class)
-        # Handle string class names
+      def throttle_config_for(job_class)
         if job_class.is_a?(String)
-          begin
-            klass = Object.const_get(job_class)
-            return klass.sidekiq_throttle_config if klass.respond_to?(:sidekiq_throttle_config)
-          rescue NameError
-            # For test classes that don't have proper constant names
-            return nil
-          end
+          klass = safe_const_get(job_class)
+          return klass.sidekiq_throttle_config if klass&.respond_to?(:sidekiq_throttle_config)
         elsif job_class.respond_to?(:sidekiq_throttle_config)
-          # Handle actual class objects
           return job_class.sidekiq_throttle_config
         end
+        nil
+      end
+
+      def safe_const_get(class_name)
+        Object.const_get(class_name)
+      rescue NameError
         nil
       end
 
@@ -82,10 +92,7 @@ module Sidekiq
         delay = Sidekiq::QueueThrottled.configuration.retry_delay
         job['at'] = Time.now.to_f + delay
         job['queue'] = queue_name
-
-        Sidekiq.redis do |conn|
-          conn.zadd('schedule', job['at'], job.to_json)
-        end
+        Sidekiq.redis { |conn| conn.zadd('schedule', job['at'], job.to_json) }
       end
     end
   end

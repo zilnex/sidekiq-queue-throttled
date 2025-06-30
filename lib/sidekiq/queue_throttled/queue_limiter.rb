@@ -17,39 +17,26 @@ module Sidekiq
       def acquire_lock(worker_id = nil)
         worker_id ||= SecureRandom.uuid
         lock_id = "#{worker_id}:#{Time.now.to_f}"
-
         @mutex.with_write_lock do
-          current_count = get_current_count
-          puts "DEBUG: QueueLimiter - current_count: #{current_count}, limit: #{@limit}"
-          return false if current_count >= @limit
+          return false if limit_reached?
 
-          # Increment the counter first
           increment_counter
-          puts "DEBUG: QueueLimiter - acquired lock: #{lock_id}"
-          return lock_id
+          lock_id
         end
-
         false
       end
 
       def release_lock(lock_id)
         return false unless lock_id
 
-        @mutex.with_write_lock do
-          # For time-based limiting, we don't immediately decrement the counter
-          # The counter will expire naturally after the TTL period
-          # This prevents immediate reuse of slots
-          true
-        end
+        @mutex.with_write_lock { true }
       rescue StandardError => e
         Sidekiq::QueueThrottled.logger.error "Failed to release lock #{lock_id} for queue #{@queue_name}: #{e.message}"
         false
       end
 
       def current_count
-        @mutex.with_read_lock do
-          get_current_count
-        end
+        @mutex.with_read_lock { fetch_current_count }
       end
 
       def available_slots
@@ -59,7 +46,6 @@ module Sidekiq
       def reset!
         @mutex.with_write_lock do
           @redis.del(@counter_key)
-          # Clear all locks for this queue
           pattern = "#{Sidekiq::QueueThrottled.configuration.redis_key_prefix}:queue:#{@queue_name}:lock:*"
           keys = @redis.keys(pattern)
           @redis.del(*keys) unless keys.empty?
@@ -68,7 +54,11 @@ module Sidekiq
 
       private
 
-      def get_current_count
+      def limit_reached?
+        fetch_current_count >= @limit
+      end
+
+      def fetch_current_count
         count = @redis.get(@counter_key)
         result = count ? count.to_i : 0
         puts "DEBUG: get_current_count - key: #{@counter_key}, count: #{result}"
@@ -81,7 +71,7 @@ module Sidekiq
           multi.incr(@counter_key)
           multi.expire(@counter_key, Sidekiq::QueueThrottled.configuration.throttle_ttl)
         end
-        puts "DEBUG: increment_counter - after increment, count: #{get_current_count}"
+        puts "DEBUG: increment_counter - after increment, count: #{fetch_current_count}"
       end
 
       def decrement_counter
@@ -89,11 +79,8 @@ module Sidekiq
           multi.decr(@counter_key)
           multi.expire(@counter_key, Sidekiq::QueueThrottled.configuration.throttle_ttl)
         end
-        # Ensure counter doesn't go below 0
-        current = get_current_count
-        if current.negative?
-          @redis.set(@counter_key, 0)
-        end
+        current = fetch_current_count
+        @redis.set(@counter_key, 0) if current.negative?
       end
 
       def acquire_redis_lock(lock_id)
@@ -101,7 +88,7 @@ module Sidekiq
         @redis.set(lock_key, '1', nx: true, ex: Sidekiq::QueueThrottled.configuration.lock_ttl)
       end
 
-      def release_redis_lock(lock_id)
+      def release_redis_lock?(lock_id)
         lock_key = "#{@lock_key}:#{lock_id}"
         @redis.del(lock_key).positive?
       end
