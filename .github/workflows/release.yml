@@ -1,0 +1,27 @@
+name: Release to RubyGems
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Build gem
+        run: gem build sidekiq-queue-throttled.gemspec
+
+      - name: Publish to RubyGems
+        run: gem push sidekiq-queue-throttled-*.gem
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }} 
