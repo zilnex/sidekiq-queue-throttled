@@ -63,7 +63,7 @@ module TestHelpers
     klass
   end
 
-  def wait_for_condition(timeout = 5, &condition)
+  def wait_for_condition?(timeout = 5, &condition)
     start_time = Time.now
     while Time.now - start_time < timeout
       return true if condition.call

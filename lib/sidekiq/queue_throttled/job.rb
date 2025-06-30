@@ -5,12 +5,24 @@ module Sidekiq
     module Job
       def self.included(base)
         base.extend(ClassMethods)
+        setup_class_attributes(base)
+      end
+
+      def self.setup_class_attributes(base)
+        setup_attr_accessor(base)
+        setup_class_methods(base)
+      end
+
+      def self.setup_attr_accessor(base)
         base.class_eval do
-          # Simple class attribute implementation
           class << self
             attr_accessor :sidekiq_throttle_config
           end
+        end
+      end
 
+      def self.setup_class_methods(base)
+        base.class_eval do
           def self.sidekiq_throttle_config
             @sidekiq_throttle_config
           end

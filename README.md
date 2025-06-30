@@ -203,7 +203,7 @@ Sidekiq::QueueThrottled.redis = Redis.new(url: ENV['REDIS_URL'])
 limiter = Sidekiq::QueueThrottled::QueueLimiter.new(queue_name, limit)
 
 # Acquire a lock (returns lock_id or false)
-lock_id = limiter.acquire_lock
+lock_id = limiter.acquire_lock?
 
 # Release a lock
 limiter.release_lock(lock_id)
@@ -272,9 +272,9 @@ RSpec.describe "Queue Limiting" do
   it "respects queue limits" do
     limiter = Sidekiq::QueueThrottled::QueueLimiter.new("test_queue", 2)
     
-    expect(limiter.acquire_lock).to be_truthy
-    expect(limiter.acquire_lock).to be_truthy
-    expect(limiter.acquire_lock).to be_falsey # Limit reached
+    expect(limiter.acquire_lock?).to be_truthy
+    expect(limiter.acquire_lock?).to be_truthy
+    expect(limiter.acquire_lock?).to be_falsey # Limit reached
   end
 end
 ```

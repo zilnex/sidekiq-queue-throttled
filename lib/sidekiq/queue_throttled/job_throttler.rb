@@ -2,7 +2,33 @@
 
 module Sidekiq
   module QueueThrottled
+    module RedisKeyManager
+      def concurrency_key(key_suffix)
+        "#{Sidekiq::QueueThrottled.configuration.redis_key_prefix}:concurrency:#{@job_class}:#{key_suffix}"
+      end
+
+      def rate_key(key_suffix, period)
+        window = Time.now.to_i / period
+        "#{Sidekiq::QueueThrottled.configuration.redis_key_prefix}:rate:#{@job_class}:#{key_suffix}:#{window}"
+      end
+
+      def resolve_key_suffix(key_suffix, args)
+        case key_suffix
+        when Proc
+          key_suffix.call(*args)
+        when Symbol
+          args.first.send(key_suffix) if args.first.respond_to?(key_suffix)
+        when String
+          key_suffix
+        else
+          'default'
+        end.to_s
+      end
+    end
+
     class JobThrottler
+      include RedisKeyManager
+
       attr_reader :job_class, :throttle_config, :redis
 
       def initialize(job_class, throttle_config, redis = nil)
@@ -23,8 +49,8 @@ module Sidekiq
 
         @mutex.with_write_lock do
           return false unless can_process?(args)
-          return acquire_concurrency_slot(args) if @throttle_config[:concurrency]
-          return acquire_rate_slot(args) if @throttle_config[:rate]
+          return acquire_concurrency_slot?(args) if @throttle_config[:concurrency]
+          return acquire_rate_slot?(args) if @throttle_config[:rate]
 
           true
         end
@@ -34,7 +60,7 @@ module Sidekiq
         return true unless @throttle_config
 
         @mutex.with_write_lock do
-          release_concurrency_slot(args) if @throttle_config[:concurrency]
+          release_concurrency_slot?(args) if @throttle_config[:concurrency]
         end
         true
       rescue StandardError => e
@@ -65,7 +91,7 @@ module Sidekiq
         current_count < limit
       end
 
-      def acquire_concurrency_slot(args)
+      def acquire_concurrency_slot?(args)
         config = @throttle_config[:concurrency]
         key_suffix = resolve_key_suffix(config[:key_suffix], args)
         key = concurrency_key(key_suffix)
@@ -76,7 +102,7 @@ module Sidekiq
         true
       end
 
-      def release_concurrency_slot(args)
+      def release_concurrency_slot?(args)
         config = @throttle_config[:concurrency]
         key_suffix = resolve_key_suffix(config[:key_suffix], args)
         key = concurrency_key(key_suffix)
@@ -87,7 +113,7 @@ module Sidekiq
         true
       end
 
-      def acquire_rate_slot(args)
+      def acquire_rate_slot?(args)
         config = @throttle_config[:rate]
         period = config[:period] || 60
         key_suffix = resolve_key_suffix(config[:key_suffix], args)
@@ -109,28 +135,6 @@ module Sidekiq
         key = rate_key(key_suffix, period)
         count = @redis.get(key)
         count ? count.to_i : 0
-      end
-
-      def concurrency_key(key_suffix)
-        "#{Sidekiq::QueueThrottled.configuration.redis_key_prefix}:concurrency:#{@job_class}:#{key_suffix}"
-      end
-
-      def rate_key(key_suffix, period)
-        window = Time.now.to_i / period
-        "#{Sidekiq::QueueThrottled.configuration.redis_key_prefix}:rate:#{@job_class}:#{key_suffix}:#{window}"
-      end
-
-      def resolve_key_suffix(key_suffix, args)
-        case key_suffix
-        when Proc
-          key_suffix.call(*args)
-        when Symbol
-          args.first.send(key_suffix) if args.first.respond_to?(key_suffix)
-        when String
-          key_suffix
-        else
-          'default'
-        end.to_s
       end
     end
   end

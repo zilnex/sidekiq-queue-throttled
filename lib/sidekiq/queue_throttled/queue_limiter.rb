@@ -14,7 +14,7 @@ module Sidekiq
         @mutex = Concurrent::ReentrantReadWriteLock.new
       end
 
-      def acquire_lock(worker_id = nil)
+      def acquire_lock?(worker_id = nil)
         worker_id ||= SecureRandom.uuid
         lock_id = "#{worker_id}:#{Time.now.to_f}"
         @mutex.with_write_lock do
@@ -23,7 +23,6 @@ module Sidekiq
           increment_counter
           lock_id
         end
-        false
       end
 
       def release_lock(lock_id)

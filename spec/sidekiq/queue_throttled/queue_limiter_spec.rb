@@ -25,17 +25,17 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
     end
   end
 
-  describe '#acquire_lock' do
+  describe '#acquire_lock?' do
     it 'acquires lock when under limit' do
-      lock_id = limiter.acquire_lock
+      lock_id = limiter.acquire_lock?
       expect(lock_id).to be_truthy
       expect(limiter.current_count).to eq(1)
     end
 
     it 'acquires multiple locks up to limit' do
-      lock1 = limiter.acquire_lock
-      lock2 = limiter.acquire_lock
-      lock3 = limiter.acquire_lock
+      lock1 = limiter.acquire_lock?
+      lock2 = limiter.acquire_lock?
+      lock3 = limiter.acquire_lock?
 
       expect(lock1).to be_truthy
       expect(lock2).to be_truthy
@@ -44,31 +44,31 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
     end
 
     it 'fails to acquire lock when at limit' do
-      limiter.acquire_lock
-      limiter.acquire_lock
-      limiter.acquire_lock
+      limiter.acquire_lock?
+      limiter.acquire_lock?
+      limiter.acquire_lock?
 
-      lock4 = limiter.acquire_lock
+      lock4 = limiter.acquire_lock?
       expect(lock4).to be_falsey
       expect(limiter.current_count).to eq(3)
     end
 
     it 'uses provided worker_id' do
       worker_id = 'worker_123'
-      lock_id = limiter.acquire_lock(worker_id)
+      lock_id = limiter.acquire_lock?(worker_id)
       expect(lock_id).to include(worker_id)
     end
 
     it 'generates unique lock_id for each call' do
-      lock1 = limiter.acquire_lock
-      lock2 = limiter.acquire_lock
+      lock1 = limiter.acquire_lock?
+      lock2 = limiter.acquire_lock?
       expect(lock1).not_to eq(lock2)
     end
   end
 
   describe '#release_lock' do
     it 'releases lock and decrements counter' do
-      lock_id = limiter.acquire_lock
+      lock_id = limiter.acquire_lock?
       expect(limiter.current_count).to eq(1)
 
       result = limiter.release_lock(lock_id)
@@ -90,7 +90,7 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
     it 'handles redis errors gracefully' do
       allow(limiter.redis).to receive(:del).and_raise(Redis::BaseError.new('Connection error'))
 
-      lock_id = limiter.acquire_lock
+      lock_id = limiter.acquire_lock?
       result = limiter.release_lock(lock_id)
       expect(result).to be_truthy
     end
@@ -102,14 +102,14 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
     end
 
     it 'returns correct count after acquiring locks' do
-      limiter.acquire_lock
-      limiter.acquire_lock
+      limiter.acquire_lock?
+      limiter.acquire_lock?
       expect(limiter.current_count).to eq(2)
     end
 
     it 'returns correct count after releasing locks' do
-      lock1 = limiter.acquire_lock
-      limiter.acquire_lock
+      lock1 = limiter.acquire_lock?
+      limiter.acquire_lock?
       limiter.release_lock(lock1)
       expect(limiter.current_count).to eq(2)
     end
@@ -121,14 +121,14 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
     end
 
     it 'returns correct available slots after acquiring locks' do
-      limiter.acquire_lock
+      limiter.acquire_lock?
       expect(limiter.available_slots).to eq(2)
     end
 
     it 'returns 0 when at limit' do
-      limiter.acquire_lock
-      limiter.acquire_lock
-      limiter.acquire_lock
+      limiter.acquire_lock?
+      limiter.acquire_lock?
+      limiter.acquire_lock?
       expect(limiter.available_slots).to eq(0)
     end
 
@@ -141,7 +141,7 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
 
   describe '#reset!' do
     it 'resets counter and lock' do
-      limiter.acquire_lock
+      limiter.acquire_lock?
       expect(limiter.current_count).to eq(1)
 
       limiter.reset!
@@ -149,13 +149,13 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
     end
 
     it 'allows acquiring locks after reset' do
-      limiter.acquire_lock
-      limiter.acquire_lock
-      limiter.acquire_lock
+      limiter.acquire_lock?
+      limiter.acquire_lock?
+      limiter.acquire_lock?
       expect(limiter.current_count).to eq(3)
 
       limiter.reset!
-      lock_id = limiter.acquire_lock
+      lock_id = limiter.acquire_lock?
       expect(lock_id).to be_truthy
       expect(limiter.current_count).to eq(1)
     end
@@ -168,7 +168,7 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
 
       5.times do
         threads << Thread.new do
-          lock_id = limiter.acquire_lock
+          lock_id = limiter.acquire_lock?
           lock_ids << lock_id if lock_id
         end
       end
@@ -183,7 +183,7 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
 
     it 'handles concurrent releases' do
       lock_ids = []
-      3.times { lock_ids << limiter.acquire_lock }
+      3.times { lock_ids << limiter.acquire_lock? }
 
       threads = lock_ids.map do |lock_id|
         Thread.new do
@@ -199,7 +199,7 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
 
   describe 'redis key management' do
     it 'uses correct redis key prefix' do
-      limiter.acquire_lock
+      limiter.acquire_lock?
 
       # Check that the counter key exists with correct prefix
       keys = limiter.redis.keys("sidekiq:queue_throttled:queue:#{queue_name}:*")
@@ -207,7 +207,7 @@ RSpec.describe Sidekiq::QueueThrottled::QueueLimiter do
     end
 
     it 'sets TTL on counter keys' do
-      limiter.acquire_lock
+      limiter.acquire_lock?
 
       counter_key = "#{Sidekiq::QueueThrottled.configuration.redis_key_prefix}:queue:#{queue_name}:counter"
       ttl = limiter.redis.ttl(counter_key)

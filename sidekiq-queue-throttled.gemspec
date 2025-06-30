@@ -9,7 +9,9 @@ Gem::Specification.new do |spec|
   spec.email = ['farid.workspace@gmail.com']
 
   spec.summary = 'Sidekiq gem that combines queue-level limits with job-level throttling'
-  spec.description = 'A production-ready Sidekiq gem that provides both queue-level concurrency limits and job-level throttling capabilities, combining the best of sidekiq-limit_fetch and sidekiq-throttled.'
+  spec.description = 'A production-ready Sidekiq gem that provides both queue-level concurrency limits ' \
+                     'and job-level throttling capabilities, combining the best of sidekiq-limit_fetch ' \
+                     'and sidekiq-throttled.'
   spec.homepage = 'https://github.com/zilnex/sidekiq-queue-throttled'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 2.7.0'
