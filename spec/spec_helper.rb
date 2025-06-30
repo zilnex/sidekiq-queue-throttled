@@ -6,10 +6,10 @@ require 'rspec'
 require 'timecop'
 require 'pry'
 
-# Set up real Redis with password for tests
-redis_url = ENV['REDIS_URL'] || 'redis://:123123@localhost:6379/0'
+# Set up Redis for tests - use passwordless Redis for CI, passworded for local dev
+redis_url = ENV['REDIS_URL'] || 'redis://localhost:6379/0'
 
-# Configure Sidekiq to use Redis with password
+# Configure Sidekiq to use Redis
 Sidekiq.configure_client { |c| c.redis = { url: redis_url } }
 Sidekiq.configure_server { |c| c.redis = { url: redis_url } }
 Sidekiq::QueueThrottled.redis = Redis.new(url: redis_url)
