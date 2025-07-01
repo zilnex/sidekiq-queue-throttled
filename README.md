@@ -39,6 +39,12 @@ require 'sidekiq/queue_throttled'
 
 ## Configuration
 
+The gem automatically loads configuration from multiple sources in the following order:
+
+1. **Configuration passed as arguments** to `Sidekiq::QueueThrottled.configure`
+2. **Sidekiq's configuration options** (if available)
+3. **sidekiq.yml file** in common locations (config/sidekiq.yml, sidekiq.yml, etc.)
+
 ### Queue Limits
 
 Configure queue limits in your `sidekiq.yml`:
@@ -59,10 +65,27 @@ Configure queue limits in your `sidekiq.yml`:
 Or configure programmatically:
 
 ```ruby
+# Option 1: Automatic configuration (recommended)
+Sidekiq::QueueThrottled.configure
+
+# Option 2: Configuration with custom limits
+Sidekiq::QueueThrottled.configure({
+  limits: {
+    'high' => 10,
+    'default' => 50,
+    'low' => 100
+  }
+})
+
+# Option 3: Configuration with block
 Sidekiq::QueueThrottled.configure do |config|
   config.set_queue_limit(:default, 100)
   config.set_queue_limit(:high, 50)
   config.set_queue_limit(:low, 200)
+  
+  # Customize other settings
+  config.retry_delay = 10
+  config.throttle_ttl = 7200
 end
 ```
 
@@ -299,6 +322,32 @@ end
 - **Concurrent Access**: The gem uses thread-safe primitives for concurrent access
 
 ## Troubleshooting
+
+### Jobs Staying in "Running" State
+
+If you notice jobs staying in a "running" state and never completing, this was a known issue that has been fixed. The gem now properly handles job rescheduling and ensures jobs don't get stuck in the running state.
+
+### Configuration Not Loading
+
+If your queue limits from `sidekiq.yml` are not being applied:
+
+1. **Check file location**: The gem looks for `sidekiq.yml` in these locations:
+   - `config/sidekiq.yml` (Rails apps)
+   - `sidekiq.yml` (current directory)
+   - `config/sidekiq.yml` (relative to current directory)
+
+2. **Verify YAML format**: Ensure your `sidekiq.yml` has the correct format:
+   ```yaml
+   :limits:
+     queue_name: limit_value
+   ```
+
+3. **Manual configuration**: You can also pass configuration directly:
+   ```ruby
+   Sidekiq::QueueThrottled.configure({
+     limits: { 'queue_name' => 100 }
+   })
+   ```
 
 ### "uninitialized constant Sidekiq::QueueThrottled" Error
 

@@ -12,9 +12,18 @@ module Sidekiq
         queue_name = job['queue'] || queue
         job_class = worker.class.name
 
-        return reschedule_and_return(job, queue_name, 'queue') unless queue_slot_available?(queue_name, job)
-        return reschedule_and_return(job, queue_name, 'job') unless job_slot_available?(job_class, job['args'], job)
+        # Check if we can process the job
+        unless queue_slot_available?(queue_name, job)
+          reschedule_job(job, queue_name, 'Queue limit reached')
+          return
+        end
 
+        unless job_slot_available?(job_class, job['args'], job)
+          reschedule_job(job, queue_name, 'Job throttling limit reached')
+          return
+        end
+
+        # Process the job normally
         process_job(job, queue_name, job_class, &block)
       end
 
@@ -50,11 +59,30 @@ module Sidekiq
         end
       end
 
-      def reschedule_and_return(job, queue_name, type)
-        msg = type == 'queue' ? 'Queue limit reached' : 'Job throttling limit reached'
-        Sidekiq::QueueThrottled.logger.info "#{msg} for #{queue_name}, rescheduling job"
-        reschedule_job(job, queue_name)
-        nil
+      def reschedule_job(job, queue_name, reason)
+        Sidekiq::QueueThrottled.logger.info "#{reason} for #{queue_name}, rescheduling job"
+
+        delay = Sidekiq::QueueThrottled.configuration.retry_delay
+
+        # Use Sidekiq's proper rescheduling mechanism
+        if defined?(Sidekiq::Client)
+          # For newer Sidekiq versions, use the client to reschedule
+          Sidekiq::Client.new.push(
+            'class' => job['class'],
+            'args' => job['args'],
+            'queue' => queue_name,
+            'at' => Time.now.to_f + delay
+          )
+        else
+          # Fallback for older versions
+          job['at'] = Time.now.to_f + delay
+          job['queue'] = queue_name
+          Sidekiq.redis { |conn| conn.zadd('schedule', job['at'], job.to_json) }
+        end
+
+        # Raise an exception to stop the job from being processed
+        # This ensures the job doesn't stay in "running" state
+        raise Sidekiq::Shutdown, 'Job rescheduled due to throttling'
       end
 
       def get_queue_limiter(queue_name)
@@ -85,13 +113,6 @@ module Sidekiq
         Object.const_get(class_name)
       rescue NameError
         nil
-      end
-
-      def reschedule_job(job, queue_name)
-        delay = Sidekiq::QueueThrottled.configuration.retry_delay
-        job['at'] = Time.now.to_f + delay
-        job['queue'] = queue_name
-        Sidekiq.redis { |conn| conn.zadd('schedule', job['at'], job.to_json) }
       end
     end
   end

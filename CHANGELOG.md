@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2024-12-19
+
+### Fixed
+- **Critical**: Fixed jobs staying in "running" state when rescheduled due to throttling limits
+- **Critical**: Fixed YAML configuration file not being loaded properly from sidekiq.yml
+- **Critical**: Fixed configuration not being loaded from Sidekiq's configuration options
+
+### Added
+- Automatic configuration loading from multiple sources:
+  - Configuration passed as arguments to `configure` method
+  - Sidekiq's configuration options (if available)
+  - sidekiq.yml file in common locations (config/sidekiq.yml, sidekiq.yml, etc.)
+- Enhanced configuration loading with `load_configuration!` method
+- Support for Rails-specific sidekiq.yml location detection
+- Improved job rescheduling using Sidekiq's proper client mechanism
+- Better error handling for job rescheduling to prevent stuck jobs
+
+### Changed
+- Updated `Sidekiq::QueueThrottled.configure` to accept configuration arguments
+- Improved middleware to properly handle job lifecycle and prevent stuck jobs
+- Enhanced configuration loading to prioritize user-provided configuration over defaults
+- Updated examples to show the new configuration loading capabilities
+
+### Technical Details
+- Jobs are now properly rescheduled using `Sidekiq::Client.new.push` for newer Sidekiq versions
+- Configuration loading follows a clear precedence order: arguments > Sidekiq config > YAML file
+- Middleware now raises `Sidekiq::Shutdown` exception to properly stop job processing when rescheduling
+- Added comprehensive file path detection for sidekiq.yml in Rails and non-Rails environments
+
 ## [1.1.3] - 2024-12-19
 
 ### Changed

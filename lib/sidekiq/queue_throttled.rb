@@ -24,8 +24,10 @@ end
 module Sidekiq
   module QueueThrottled
     class << self
-      def configure
-        yield configuration
+      def configure(config_source = nil)
+        yield configuration if block_given?
+        configuration.load_configuration!(config_source)
+        configuration.validate!
       end
 
       def configuration
@@ -55,3 +57,6 @@ Sidekiq.configure_server do |config|
     chain.add Sidekiq::QueueThrottled::Middleware
   end
 end
+
+# Auto-load configuration from sidekiq.yml if it exists
+Sidekiq::QueueThrottled.configure

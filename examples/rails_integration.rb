@@ -30,20 +30,42 @@ end
 # Example of how to configure the gem in config/initializers/sidekiq_queue_throttled.rb
 # (This would be in a separate file in a real Rails app)
 
+# In your Rails application, you can configure the gem in several ways:
+
+# 1. Automatic configuration (recommended)
+# The gem will automatically load configuration from:
+# - config/sidekiq.yml (if it exists)
+# - Sidekiq's configuration options
+# - Any additional configuration you provide
+
+# In config/initializers/sidekiq_queue_throttled.rb:
 Sidekiq::QueueThrottled.configure do |config|
-  # Set queue limits
-  config.set_queue_limit(:notifications, 10)
-  config.set_queue_limit(:processing, 5)
-  config.set_queue_limit(:api_calls, 20)
-
-  # Configure Redis key prefix
-  config.redis_key_prefix = 'myapp:sidekiq:queue_throttled'
-
-  # Configure TTL values
-  config.throttle_ttl = 3600 # 1 hour
-  config.lock_ttl = 300 # 5 minutes
-  config.retry_delay = 5
+  # You can override or add additional configuration here
+  config.retry_delay = 10 # Increase retry delay to 10 seconds
+  config.throttle_ttl = 7200 # Increase TTL to 2 hours
 end
+
+# 2. Configuration with custom config source
+# You can also pass a configuration hash or YAML file path:
+Sidekiq::QueueThrottled.configure({
+                                    limits: {
+                                      'email' => 5,
+                                      'processing' => 3,
+                                      'api_calls' => 10
+                                    }
+                                  })
+
+# 3. Configuration with YAML file path
+Sidekiq::QueueThrottled.configure('config/custom_sidekiq.yml')
+
+# 4. Configuration with YAML content string
+yaml_config = <<~YAML
+  limits:
+    email: 5
+    processing: 3
+    api_calls: 10
+YAML
+Sidekiq::QueueThrottled.configure(yaml_config)
 
 # Use Rails logger
 Sidekiq::QueueThrottled.logger = Rails.logger

@@ -1,101 +1,91 @@
 # frozen_string_literal: true
 
-# Basic usage example for sidekiq-queue-throttled
+# Basic usage example for sidekiq-queue-throttled gem
+# This example shows how to use the gem in a non-Rails application
 
+require 'sidekiq'
 require 'sidekiq/queue_throttled'
 
-# Configure queue limits
+# Configure the gem
+# The gem will automatically try to load configuration from:
+# 1. Any configuration you provide as an argument
+# 2. Sidekiq's configuration options
+# 3. sidekiq.yml file in common locations
+
+# Option 1: Automatic configuration (recommended)
+Sidekiq::QueueThrottled.configure
+
+# Option 2: Configuration with custom limits
+Sidekiq::QueueThrottled.configure({
+                                    limits: {
+                                      'high' => 10,
+                                      'default' => 50,
+                                      'low' => 100
+                                    }
+                                  })
+
+# Option 3: Configuration with block
 Sidekiq::QueueThrottled.configure do |config|
-  config.set_queue_limit(:email_queue, 10)
-  config.set_queue_limit(:processing_queue, 5)
-  config.set_queue_limit(:api_queue, 20)
+  config.set_queue_limit(:high, 10)
+  config.set_queue_limit(:default, 50)
+  config.set_queue_limit(:low, 100)
+
+  # Customize other settings
+  config.retry_delay = 10
+  config.throttle_ttl = 7200
 end
 
-# Example job with concurrency throttling
-class UserNotificationJob
-  include Sidekiq::Job
-  include Sidekiq::QueueThrottled::Job
+# Example job with queue-level throttling
+class HighPriorityJob
+  include Sidekiq::Worker
 
-  sidekiq_options queue: :email_queue
+  sidekiq_options queue: 'high'
 
-  # Allow maximum 3 concurrent jobs per user
-  sidekiq_throttle(
-    concurrency: {
-      limit: 3,
-      key_suffix: ->(user_id) { user_id }
-    }
-  )
-
-  def perform(user_id, message)
-    puts "Sending notification to user #{user_id}: #{message}"
-    # Simulate work
-    sleep(rand(1..3))
+  def perform(data)
+    puts "Processing high priority job with data: #{data}"
+    # Your job logic here
   end
 end
 
-# Example job with rate throttling
-class APICallJob
-  include Sidekiq::Job
+# Example job with job-level throttling
+class EmailJob
+  include Sidekiq::Worker
   include Sidekiq::QueueThrottled::Job
 
-  sidekiq_options queue: :api_queue
+  sidekiq_options queue: 'email'
 
-  # Allow maximum 100 jobs per hour per API key
-  sidekiq_throttle(
-    rate: {
-      limit: 100,
-      period: 3600, # 1 hour in seconds
-      key_suffix: ->(api_key) { api_key }
-    }
-  )
+  # Configure concurrency limiting
+  sidekiq_throttle concurrency: { limit: 3, key_suffix: :user_id }
 
-  def perform(api_key, endpoint, _data)
+  def perform(user_id, email_data)
+    puts "Sending email to user #{user_id}"
+    # Your email sending logic here
+  end
+end
+
+# Example job with rate limiting
+class ApiCallJob
+  include Sidekiq::Worker
+  include Sidekiq::QueueThrottled::Job
+
+  sidekiq_options queue: 'api_calls'
+
+  # Configure rate limiting (10 calls per minute per API key)
+  sidekiq_throttle rate: { limit: 10, period: 60, key_suffix: :api_key }
+
+  def perform(api_key, endpoint, data)
     puts "Making API call to #{endpoint} with key #{api_key}"
-    # Simulate API call
-    sleep(rand(0.1..0.5))
+    # Your API call logic here
   end
 end
 
-# Example job with complex throttling
-class DataProcessingJob
-  include Sidekiq::Job
-  include Sidekiq::QueueThrottled::Job
+# Enqueue jobs
+HighPriorityJob.perform_async('important data')
+EmailJob.perform_async(123, { subject: 'Hello', body: 'World' })
+ApiCallJob.perform_async('api_key_123', '/users', { name: 'John' })
 
-  sidekiq_options queue: :processing_queue
-
-  # Allow maximum 5 concurrent jobs per organization per data type
-  sidekiq_throttle(
-    concurrency: {
-      limit: 5,
-      key_suffix: ->(org_id, data_type) { "#{org_id}:#{data_type}" }
-    }
-  )
-
-  def perform(org_id, data_type, _data)
-    puts "Processing #{data_type} data for organization #{org_id}"
-    # Simulate data processing
-    sleep(rand(2..5))
-  end
-end
-
-# Example of enqueuing jobs
-if __FILE__ == $PROGRAM_NAME
-  puts 'Enqueuing example jobs...'
-
-  # Enqueue user notification jobs
-  5.times do |i|
-    UserNotificationJob.perform_async(123, "Test message #{i}")
-  end
-
-  # Enqueue API call jobs
-  10.times do |i|
-    APICallJob.perform_async('api_key_123', '/users', { id: i })
-  end
-
-  # Enqueue data processing jobs
-  3.times do |i|
-    DataProcessingJob.perform_async(456, 'users', { batch: i })
-  end
-
-  puts 'Jobs enqueued! Check your Sidekiq dashboard to see throttling in action.'
-end
+# The gem will automatically:
+# 1. Apply queue-level limits from configuration
+# 2. Apply job-level throttling based on sidekiq_throttle configuration
+# 3. Reschedule jobs when limits are reached
+# 4. Properly handle job lifecycle to prevent jobs from staying in "running" state
