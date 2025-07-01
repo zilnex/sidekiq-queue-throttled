@@ -24,4 +24,4 @@ jobs:
       - name: Publish to RubyGems
         run: gem push sidekiq-queue-throttled-*.gem
         env:
-          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }} 
+          GEM_HOST_API_KEY: ${{ secrets.GEM_HOST_API_KEY }} 
