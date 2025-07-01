@@ -38,7 +38,7 @@ module Sidekiq
         acquired
       end
 
-      def process_job(job, queue_name, job_class, &block)
+      def process_job(job, queue_name, job_class, &_block)
         queue_limiter = get_queue_limiter(queue_name)
         job_throttler = get_job_throttler(job_class)
         lock_id = job['lock_id']
