@@ -108,3 +108,8 @@ example_id                                                    | status | run_tim
 ./spec/sidekiq/queue_throttled/queue_limiter_spec.rb[1:7:2]   | passed | 0.00131 seconds |
 ./spec/sidekiq/queue_throttled/queue_limiter_spec.rb[1:8:1]   | passed | 0.00045 seconds |
 ./spec/sidekiq/queue_throttled/queue_limiter_spec.rb[1:8:2]   | passed | 0.0008 seconds  |
+./spec/sidekiq/queue_throttled/railtie_spec.rb[1:1:1]         | failed | 0.00014 seconds |
+./spec/sidekiq/queue_throttled/railtie_spec.rb[1:1:2]         | failed | 0.00011 seconds |
+./spec/sidekiq/queue_throttled/railtie_spec.rb[1:1:3]         | failed | 0.00011 seconds |
+./spec/sidekiq/queue_throttled/railtie_spec.rb[1:2:1]         | failed | 0.00128 seconds |
+./spec/sidekiq/queue_throttled/railtie_spec.rb[1:2:2]         | failed | 0.00021 seconds |

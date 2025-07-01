@@ -25,6 +25,18 @@ And then execute:
 $ bundle install
 ```
 
+### Rails Applications
+
+For Rails applications, the gem will be automatically loaded when your application starts. No additional configuration is required.
+
+### Non-Rails Applications
+
+For non-Rails applications, you need to explicitly require the gem:
+
+```ruby
+require 'sidekiq/queue_throttled'
+```
+
 ## Configuration
 
 ### Queue Limits
@@ -285,6 +297,30 @@ end
 - **Memory Usage**: Counters are stored in Redis with TTL, so memory usage is bounded
 - **Network Latency**: Consider Redis network latency when setting TTL values
 - **Concurrent Access**: The gem uses thread-safe primitives for concurrent access
+
+## Troubleshooting
+
+### "uninitialized constant Sidekiq::QueueThrottled" Error
+
+If you encounter this error when trying to use the gem:
+
+```
+uninitialized constant Sidekiq::QueueThrottled (NameError)
+```
+
+**For Rails applications:**
+- Make sure the gem is properly added to your Gemfile
+- Restart your Rails server after adding the gem
+- The gem should auto-load when your Rails application starts
+
+**For non-Rails applications:**
+- Explicitly require the gem at the top of your file:
+  ```ruby
+  require 'sidekiq/queue_throttled'
+  ```
+
+**For IRB/Console:**
+- If you're testing in IRB or Rails console, make sure to restart the console after adding the gem to your Gemfile
 
 ## Contributing
 

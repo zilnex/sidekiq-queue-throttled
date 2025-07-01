@@ -13,6 +13,14 @@ require_relative 'queue_throttled/job_throttler'
 require_relative 'queue_throttled/middleware'
 require_relative 'queue_throttled/job'
 
+# Auto-load Rails integration if Rails is available
+begin
+  require 'rails'
+  require_relative 'queue_throttled/railtie'
+rescue LoadError
+  # Rails is not available, which is fine for non-Rails applications
+end
+
 module Sidekiq
   module QueueThrottled
     class << self
